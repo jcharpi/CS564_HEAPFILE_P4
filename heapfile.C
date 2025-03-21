@@ -67,6 +67,13 @@ const Status createHeapFile(const string fileName)
         if (status != OK)
             return status;
 
+        // flush the pages and close the file; need this or we get errors in tests
+        status = bufMgr->flushFile(file);
+        if (status != OK)
+            return (status);
+        status = db.closeFile(file);
+        if (status != OK)
+            return (status);
         return OK;
     }
     return (FILEEXISTS);
