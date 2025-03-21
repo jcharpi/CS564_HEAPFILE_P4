@@ -48,6 +48,8 @@ const Status createHeapFile(const string fileName)
 
         // use newPage pointer to invoke init method
         newPage->init(newPageNo);
+        status = newPage->setNextPage(-1);
+        if (status != OK) return status;
 
         // only header page
         hdrPage->pageCnt = 1;
@@ -63,14 +65,6 @@ const Status createHeapFile(const string fileName)
         status = bufMgr->unPinPage(file, hdrPageNo, true);
         if (status != OK)
             return status;
-
-        // flush pages & close
-        status = bufMgr->flushFile(file);
-        if (status != OK)
-            return (status);
-        status = db.closeFile(file);
-        if (status != OK)
-            return (status);
 
         return OK;
     }
