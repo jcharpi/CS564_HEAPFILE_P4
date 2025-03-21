@@ -49,7 +49,8 @@ const Status createHeapFile(const string fileName)
         // use newPage pointer to invoke init method
         newPage->init(newPageNo);
         status = newPage->setNextPage(-1);
-        if (status != OK) return status;
+        if (status != OK)
+            return status;
 
         // only header page
         hdrPage->pageCnt = 1;
@@ -85,9 +86,47 @@ HeapFile::HeapFile(const string &fileName, Status &returnStatus)
 
     cout << "opening file " << fileName << endl;
 
-    // open the file and read in the header page and the first data page
+    // first open the appropriate file by calling db.openFile()
     if ((status = db.openFile(fileName, filePtr)) == OK)
     {
+        // read and pin the header page for the file in the buffer pool; use file->getFirstPage()
+        // init headerPageNo
+        status = filePtr->getFirstPage(headerPageNo);
+        if (status != OK)
+        {
+            cerr << "error getting first pageNo\n";
+            returnStatus = status;
+        }
+
+        status = bufMgr->readPage(filePtr, headerPageNo, pagePtr);
+        if (status != OK)
+        {
+            cerr << "error reading header page\n";
+            returnStatus = status;
+        }
+        // init headerPage and hdrDirtyFlag
+        headerPage = (FileHdrPage *)pagePtr;
+        hdrDirtyFlag = false;
+
+        // read and pin the first page of the file into the buffer pool
+        // init curPageNo
+        curPageNo = headerPage->firstPage;
+
+        // init curPage
+        status = bufMgr->readPage(filePtr, curPageNo, curPage);
+        if (status != OK)
+        {
+            cerr << "error reading first data page\n";
+            returnStatus = status;
+        }
+
+        // init the values of curDirtyFlag appropriately
+        curDirtyFlag = false;
+
+        // set curRec to NULLRID
+        curRec = NULLRID;
+        returnStatus = OK;
+        return;
     }
     else
     {
@@ -148,6 +187,45 @@ const Status HeapFile::getRecord(const RID &rid, Record &rec)
     Status status;
 
     // cout<< "getRecord. record (" << rid.pageNo << "." << rid.slotNo << ")" << endl;
+
+    // if the desired record is on the currently pinned page, invoke curpage->getrecord(rid, rec)
+    if (curPage != nullptr && curPageNo == rid.pageNo)
+    {
+        status = curPage->getRecord(rid, rec);
+        if (status == OK)
+            curRec = rid; // do the bookkeeping
+        return status;
+    }
+    // otherwise, unpin the currently pinned page (assuming a page is pinned)
+    else
+    {
+        if (curPage != nullptr)
+        {
+            status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+            if (status != OK)
+                return status;
+            // do the bookkeeping
+            curPage = nullptr;
+        }
+
+        // use the pageNo field of the RID to read the page into the buffer pool
+        // do the bookkeeping
+        curPageNo = rid.pageNo;
+        status = bufMgr->readPage(filePtr, curPageNo, curPage);
+        if (status != OK)
+            return status;
+
+        // do the bookkeeping
+        curDirtyFlag = false;
+
+        status = curPage->getRecord(rid, rec);
+        if (status == OK)
+        {
+            // do the bookkeeping
+            curRec = rid;
+        }
+        return status;
+    }
 }
 
 HeapFileScan::HeapFileScan(const string &name,
