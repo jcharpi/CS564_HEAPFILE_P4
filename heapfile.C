@@ -15,8 +15,59 @@ const Status createHeapFile(const string fileName)
     status = db.openFile(fileName, file);
     if (status != OK)
     {
-        // file doesn't exist. First create it and allocate
-        // an empty header page and data page.
+        // file doesn't exist. First create it
+        status = db.createFile(fileName);
+
+        // trouble creating file
+        if (status != OK)
+            return status;
+
+        // properly initialize all pointers in file
+        status = db.openFile(fileName, file);
+        if (status != OK)
+            return status;
+
+        // allocate empty page by invoking bm->allocPage()
+        status = bufMgr->allocPage(file, hdrPageNo, newPage);
+        if (status != OK)
+            return status;
+
+        // use the pointer returned from allocPage() and cast it to a FileHdrPage*
+        hdrPage = (FileHdrPage *)newPage;
+
+        // use the hdrPage pointer to init values in header page
+        strncpy(hdrPage->fileName, fileName.c_str(), MAXNAMESIZE);
+        // no data page yet
+        hdrPage->firstPage = -1;
+        hdrPage->lastPage = -1;
+        // only header page
+        hdrPage->pageCnt = 1;
+        hdrPage->recCnt = 0;
+
+        // call bm->allocPage() again; this will be first data page of file
+        status = bufMgr->allocPage(file, newPageNo, newPage);
+        if (status != OK)
+            return status;
+
+        // use newPage pointer to invoke init method
+        newPage->init(newPageNo);
+
+        // store page number of the data page in firstPage and lastPage attributes of FileHdrPage
+        hdrPage->firstPage = newPageNo;
+        hdrPage->lastPage = newPageNo;
+        // pageCnt = header page and data page
+        hdrPage->pageCnt = 2;
+
+        // unpin both pages and mark them as dirty
+        status = bufMgr->unPinPage(file, hdrPageNo, true);
+        if (status != OK)
+            return status;
+        status = bufMgr->unPinPage(file, newPageNo, true);
+        if (status != OK)
+            return status;
+
+        // file creation was successful.
+        return OK;
     }
     return (FILEEXISTS);
 }
