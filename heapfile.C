@@ -37,36 +37,41 @@ const Status createHeapFile(const string fileName)
 
         // use the hdrPage pointer to init values in header page
         strncpy(hdrPage->fileName, fileName.c_str(), MAXNAMESIZE);
-        // no data page yet
-        hdrPage->firstPage = -1;
-        hdrPage->lastPage = -1;
-        // only header page
-        hdrPage->pageCnt = 1;
-        hdrPage->recCnt = 0;
 
         // call bm->allocPage() again; this will be first data page of file
         status = bufMgr->allocPage(file, newPageNo, newPage);
+
         if (status != OK)
+        {
             return status;
+        }
 
         // use newPage pointer to invoke init method
         newPage->init(newPageNo);
 
+        // only header page
+        hdrPage->pageCnt = 1;
+        hdrPage->recCnt = 0;
         // store page number of the data page in firstPage and lastPage attributes of FileHdrPage
         hdrPage->firstPage = newPageNo;
         hdrPage->lastPage = newPageNo;
-        // pageCnt = header page and data page
-        hdrPage->pageCnt = 2;
 
         // unpin both pages and mark them as dirty
-        status = bufMgr->unPinPage(file, hdrPageNo, true);
-        if (status != OK)
-            return status;
         status = bufMgr->unPinPage(file, newPageNo, true);
         if (status != OK)
             return status;
+        status = bufMgr->unPinPage(file, hdrPageNo, true);
+        if (status != OK)
+            return status;
 
-        // file creation was successful.
+        // flush pages & close
+        status = bufMgr->flushFile(file);
+        if (status != OK)
+            return (status);
+        status = db.closeFile(file);
+        if (status != OK)
+            return (status);
+
         return OK;
     }
     return (FILEEXISTS);
