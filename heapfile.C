@@ -330,6 +330,55 @@ const Status HeapFileScan::scanNext(RID &outRid)
     RID tmpRid;
     int nextPageNo;
     Record rec;
+
+    while(true) {
+        if(curPage == NULL)
+            return NORECORDS;
+        if(curRec.pageNo == -1 && curRec.slotNo == -1)
+            status = curPage->firstRecord(nextRid);
+        else
+            status = curPage->nextRecord(curRec, nextRid);
+        
+        if (status != OK)
+        {
+            status = curPage->getNextPage(nextPageNo);
+            if(status!=OK)
+                return status;
+            if(nextPageNo == -1)
+                return NORECORDS;
+            
+            status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+            if(status != OK)
+                return status;
+            
+            curPageNo = nextPageNo;
+            status = bufMgr->readPage(filePtr, curPageNo, curPage);
+            if(status != OK)
+                return status;
+            curDirtyFlag = false;
+            curRec.pageNo = -1;
+            curRec.slotNo = -1;
+            continue;
+        }
+        else 
+        {
+            return status;
+        }
+    }
+    status = curPage->getRecord(nextRid, rec);
+    if (status != OK)
+        return status;
+
+    if(matchRec(rec)){
+        curRec = nextRid;
+        outRid = curRec;
+        return OK;
+    }
+    else
+    {
+        curRec = nextRid;
+    }
+
 }
 
 // returns pointer to the current record.  page is left pinned
